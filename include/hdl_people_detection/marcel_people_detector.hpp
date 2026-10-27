@@ -150,7 +150,8 @@ private:
         for(const auto& pt : cloud->points) {
           mean += pt.getVector4fMap();
         }
-        return mean.head<2>();
+        // the original code returned the sum, so pieces were (almost) never re-merged
+        return Eigen::Vector2f(mean.head<2>() / static_cast<float>(cloud->size()));
       }
     );
 
