@@ -71,6 +71,26 @@ public:
 
 private:
   /**
+   * @brief remove points near the floor so that floor residue does not merge with people
+   * @param cloud  cloud in the sensor frame
+   */
+  pcl::PointCloud<PointT>::Ptr remove_floor(const pcl::PointCloud<PointT>::Ptr& cloud) const {
+    if(sensor_height <= 0.0) {
+      return cloud;
+    }
+
+    pcl::PointCloud<PointT>::Ptr filtered(new pcl::PointCloud<PointT>());
+    filtered->reserve(cloud->size());
+    const float min_z = -sensor_height + floor_margin;
+    std::copy_if(cloud->begin(), cloud->end(), std::back_inserter(filtered->points), [=](const PointT& pt) { return pt.z > min_z; });
+    filtered->width = filtered->size();
+    filtered->height = 1;
+    filtered->is_dense = false;
+    filtered->header = cloud->header;
+    return filtered;
+  }
+
+  /**
    * @brief initialize_params
    */
   void initialize_params() {
@@ -78,6 +98,10 @@ private:
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
     downsample_filter = voxelgrid;
+
+    // floor removal in the sensor frame (assumes a level sensor at sensor_height above a flat floor, disabled if <= 0)
+    sensor_height = private_nh.param<double>("sensor_height", 0.0);
+    floor_margin = private_nh.param<double>("floor_margin", 0.25);
 
     NODELET_INFO("create people detector");
     detector.reset(new PeopleDetector(private_nh));
@@ -107,7 +131,7 @@ private:
     downsample_filter->setInputCloud(cloud);
     downsample_filter->filter(*downsampled);
     downsampled->header = cloud->header;
-    cloud = downsampled;
+    cloud = remove_floor(downsampled);
 
     // background subtraction and people detection
     auto filtered = backsub->filter(cloud);
@@ -139,7 +163,7 @@ private:
     downsample_filter->setInputCloud(cloud);
     downsample_filter->filter(*downsampled);
     downsampled->header = cloud->header;
-    cloud = downsampled;
+    cloud = remove_floor(downsampled);
 
     // transform #cloud into the globalmap space
     const auto& position = odom_msg->pose.pose.position;
@@ -170,6 +194,7 @@ private:
     backsub.reset(new BackgroundSubtractor());
     backsub->setVoxelSize(backsub_resolution, backsub_resolution, backsub_resolution);
     backsub->setOccupancyThresh(backsub_occupancy_thresh);
+    backsub->setDilation(private_nh.param<int>("backsub_dilation", 0));
     backsub->setBackgroundCloud(globalmap);
 
     backsub_voxel_markers_pub.publish(backsub->create_voxel_marker());
@@ -319,6 +344,8 @@ private:
 
   // global map
   pcl::PointCloud<PointT>::Ptr globalmap;
+  double sensor_height;
+  double floor_margin;
 
   pcl::Filter<PointT>::Ptr downsample_filter;
   std::unique_ptr<BackgroundSubtractor> backsub;

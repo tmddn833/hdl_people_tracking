@@ -42,6 +42,15 @@ public:
   }
 
   /**
+   * @brief set dilation
+   * @param d  also count background points in voxels within d voxels of a point's voxel (0: the voxel itself only).
+   *           tolerates small misalignment between the background and the input cloud
+   */
+  void setDilation(int d) {
+    dilation = d;
+  }
+
+  /**
    * @brief set background cloud
    * @param src_cloud
    */
@@ -83,7 +92,7 @@ public:
     dst_cloud->reserve(src_cloud->size() / 4);
 
     for (auto pt = src_cloud->begin(); pt != src_cloud->end(); pt++) {
-      if (isOccupied(getVoxelIndex(*pt)) < occupancy_thresh){
+      if (occupancy(getVoxelIndex(*pt)) < occupancy_thresh){
         dst_cloud->push_back(*pt);
       }
     }
@@ -195,6 +204,22 @@ private:
     return occupancy_map.coeff(getMapIndex(index));
   }
 
+  int occupancy(const Eigen::Vector3i& index) {
+    if (dilation <= 0) {
+      return isOccupied(index);
+    }
+
+    int sum = 0;
+    for (int dz = -dilation; dz <= dilation; dz++) {
+      for (int dy = -dilation; dy <= dilation; dy++) {
+        for (int dx = -dilation; dx <= dilation; dx++) {
+          sum += isOccupied(index + Eigen::Vector3i(dx, dy, dz));
+        }
+      }
+    }
+    return sum;
+  }
+
   std::string frame_id;
   Eigen::Array3f min_pos;
   Eigen::Array3f max_pos;
@@ -202,6 +227,7 @@ private:
   Eigen::Array3f inverse_voxel_size;
 
   int occupancy_thresh;
+  int dilation = 0;
   Eigen::Array3i grid_size;
   Eigen::SparseVector<int> occupancy_map;
 };
