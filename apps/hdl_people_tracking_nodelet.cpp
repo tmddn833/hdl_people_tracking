@@ -134,6 +134,8 @@ private:
     boxes.scale.x = 0.5;
     boxes.scale.y = 0.5;
     boxes.scale.z = 1.2;
+    // per-point colors are used, but rviz still warns when the marker color itself is transparent
+    boxes.color.a = 0.6f;
 
     for(int i=0; i<tracker->people.size(); i++) {
       const auto& person = tracker->people[i];
@@ -171,6 +173,11 @@ private:
       text.text = (boost::format("id:%d") % person->id()).str();
 
       markers.markers.push_back(text);
+    }
+
+    // rviz rejects an empty CUBE_LIST, so clear the boxes instead when nobody is tracked
+    if(boxes.points.empty()) {
+      markers.markers[0].action = visualization_msgs::Marker::DELETE;
     }
 
     return markers_ptr;
